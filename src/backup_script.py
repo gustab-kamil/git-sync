@@ -53,6 +53,7 @@ class GitManager:
         self.branch = branch
         self.logger = logging.getLogger("CiscoBackup")
         self.repo = self._init_repo()
+        self._ensure_branch()
 
     def _init_repo(self):
         try:
@@ -62,6 +63,22 @@ class GitManager:
             return Repo(self.repo_path)
         except Exception as e:
             self.logger.critical(f"Git init failed: {e}")
+            raise
+
+    def _ensure_branch(self):
+        """Checks out the target branch, creating it if necessary."""
+        try:
+            # Check if branch exists locally
+            if self.branch in self.repo.heads:
+                if self.repo.active_branch.name != self.branch:
+                    self.logger.info(f"Switching to existing branch: {self.branch}")
+                    self.repo.heads[self.branch].checkout()
+            else:
+                self.logger.info(f"Creating and switching to new branch: {self.branch}")
+                self.repo.create_head(self.branch).checkout()
+                
+        except Exception as e:
+            self.logger.critical(f"Failed to switch/create branch {self.branch}: {e}")
             raise
 
     def get_remote_url(self):
@@ -88,12 +105,11 @@ class GitManager:
             except Exception:
                 pass # First commit scenario
 
-            if not has_changes:
+            if has_changes:
+                self.repo.index.commit(commit_message)
+                self.logger.info(f"Committed: {commit_message}")
+            else:
                 self.logger.info("No changes detected. Skipping commit.")
-                return
-
-            self.repo.index.commit(commit_message)
-            self.logger.info(f"Committed: {commit_message}")
 
             if self.remote_name in [r.name for r in self.repo.remotes]:
                 origin = self.repo.remote(name=self.remote_name)
