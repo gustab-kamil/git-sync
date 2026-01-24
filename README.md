@@ -33,8 +33,13 @@ A professional DevOps automation script written in Python to cyclically backup C
 
 ## Installation
 
-1. Clone or download this repository.
-2. Install the required Python packages:
+1. **Fork this repository** to your own GitHub account. This allows you to have your own remote to push backups to.
+2. Clone your forked repository:
+   ```bash
+   git clone git@github.com:YOUR_USERNAME/git-sync.git
+   cd git-sync
+   ```
+3. Install the required Python packages:
 
    ```bash
    pip install -r requirements.txt
