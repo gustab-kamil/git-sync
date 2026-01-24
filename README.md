@@ -59,6 +59,12 @@ To run the backup script manually:
 python3 src/backup_script.py
 ```
 
+You can also specify a target branch (default is `main`):
+
+```bash
+python3 src/backup_script.py --branch my-backup-branch
+```
+
 The script automatically detects the authentication method based on the remote URL (SSH vs HTTPS).
 
 Check the `logs/` directory for execution details and `backups/` for the committed configuration.

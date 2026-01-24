@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import datetime
+import argparse
 from git import Repo, GitCommandError
 from dotenv import load_dotenv
 
@@ -133,14 +134,23 @@ def configure_auth_from_remote(git_manager, logger):
         logger.warning(f"Unknown remote protocol: {remote_url}. Assuming standard behavior.")
 
 def main():
-    # 1. Setup Logging & Paths
+    # 1. Parse Arguments
+    parser = argparse.ArgumentParser(description="Cisco Configuration Backup Tool")
+    parser.add_argument(
+        '--branch', 
+        default='main', 
+        help="Target git branch for backup (default: main)"
+    )
+    args = parser.parse_args()
+
+    # 2. Setup Logging & Paths
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     logger = BackupLogger.setup_logging(os.path.join(PROJECT_ROOT, "logs"))
     
     BACKUP_REPO_DIR = os.getenv("BACKUP_REPO_PATH", PROJECT_ROOT)
     
     # 3. Initialize Git Manager & Configure Auth
-    git_manager = GitManager(BACKUP_REPO_DIR)
+    git_manager = GitManager(BACKUP_REPO_DIR, branch=args.branch)
     configure_auth_from_remote(git_manager, logger)
 
     SOURCE_DIR = os.getenv("SOURCE_CONFIG_DIR", os.path.join(PROJECT_ROOT, "source_configs"))
