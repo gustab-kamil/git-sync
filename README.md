@@ -6,9 +6,12 @@ A professional DevOps automation script written in Python to cyclically backup C
 
 - **Automated Backup**: Fetches running configuration from Cisco devices (simulated via source file for this demo).
 - **Git Integration**: Automatically initializes a Git repository, tracks changes, and pushes updates.
-- **Change Detection**: Only commits when actual configuration changes are detected.
+- **Flexible Authentication**: Supports both SSH (keys) and HTTPS (password) authentication.
+- **Change Detection**: Only commits when actual configuration changes are detected (Idempotency).
 - **Logging**: Comprehensive logging with rotation support.
 - **Resilience**: Robust error handling for file I/O and Git operations.
+
+## Project Structure
 
 ## Project Structure
 
