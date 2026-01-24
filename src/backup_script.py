@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 import datetime
-import argparse
 from git import Repo, GitCommandError
 from dotenv import load_dotenv
 
@@ -64,9 +63,21 @@ class GitManager:
             self.logger.critical(f"Git init failed: {e}")
             raise
 
-    def commit_and_push(self, filename, commit_message):
+    def get_remote_url(self):
         try:
-            self.repo.index.add([filename])
+            if self.remote_name in [r.name for r in self.repo.remotes]:
+                return self.repo.remote(name=self.remote_name).url
+            return None
+        except Exception as e:
+            self.logger.error(f"Failed to get remote URL: {e}")
+            return None
+
+    def commit_and_push(self, files, commit_message):
+        try:
+            if isinstance(files, str):
+                files = [files]
+            
+            self.repo.index.add(files)
 
             # Idempotency check: prevent empty commits
             has_changes = True
@@ -97,73 +108,82 @@ class GitManager:
             self.logger.error(f"Git operation error: {e}")
             raise
 
-def setup_auth(args, logger):
-    """Configures Git authentication based on arguments."""
-    mode = args.auth[0]
+def configure_auth_from_remote(git_manager, logger):
+    """Automatically configures Git authentication based on remote URL."""
+    remote_url = git_manager.get_remote_url()
     
-    if mode == 'ssh':
-        # Determine key path: User provided OR default
-        if len(args.auth) > 1:
-            key_path = args.auth[1]
-        else:
-            key_path = os.path.expanduser('~/.ssh/id_rsa')
-            
-        if not os.path.exists(key_path):
-            logger.warning(f"SSH Key not found at {key_path}. Git may fail if key is required.")
-        
-        # Set git environment variable to use specific SSH key
-        # -o IdentitiesOnly=yes ensures it uses exactly this key and doesn't try others
-        os.environ['GIT_SSH_COMMAND'] = f'ssh -i "{key_path}" -o IdentitiesOnly=yes'
-        logger.info(f"Auth Mode: SSH (Key: {key_path})")
-        
-    elif mode == 'pass':
-        # Clear env var to allow standard Git https/password prompt behavior
+    if not remote_url:
+        logger.warning("No remote URL found. Skipping auth configuration.")
+        return
+
+    # Check for SSH (git@... or ssh://...)
+    if remote_url.startswith("git@") or remote_url.startswith("ssh://"):
+        logger.info(f"Detected SSH remote: {remote_url}")
+        # We rely on system SSH configuration (agent or ~/.ssh/config)
+        # Clearing any potentially conflicting env vars
         os.environ.pop('GIT_SSH_COMMAND', None)
-        logger.info("Auth Mode: Password/HTTPS (Standard Git behavior)")
+        
+    # Check for HTTPS
+    elif remote_url.startswith("http://") or remote_url.startswith("https://"):
+        logger.info(f"Detected HTTPS remote: {remote_url}")
+        # Ensure we don't force SSH
+        os.environ.pop('GIT_SSH_COMMAND', None)
+    
+    else:
+        logger.warning(f"Unknown remote protocol: {remote_url}. Assuming standard behavior.")
 
 def main():
-    # 1. Parse Arguments
-    parser = argparse.ArgumentParser(description="Cisco Configuration Backup Tool")
-    parser.add_argument(
-        '--auth', 
-        nargs='+', 
-        default=['ssh'], 
-        help="Authentication mode. Options: 'ssh <path-to-key>' (default) OR 'pass'"
-    )
-    args = parser.parse_args()
-
-    # 2. Setup Logging & Paths
+    # 1. Setup Logging & Paths
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     logger = BackupLogger.setup_logging(os.path.join(PROJECT_ROOT, "logs"))
     
-    # 3. Configure Auth
-    setup_auth(args, logger)
-
-    SOURCE_CONFIG = os.getenv("SOURCE_CONFIG_PATH", os.path.join(PROJECT_ROOT, "cisco_running_config.cfg"))
     BACKUP_REPO_DIR = os.getenv("BACKUP_REPO_PATH", PROJECT_ROOT)
-    BACKUP_FILENAME = "cisco_backup.cfg"
+    
+    # 3. Initialize Git Manager & Configure Auth
+    git_manager = GitManager(BACKUP_REPO_DIR)
+    configure_auth_from_remote(git_manager, logger)
+
+    SOURCE_DIR = os.getenv("SOURCE_CONFIG_DIR", os.path.join(PROJECT_ROOT, "source_configs"))
     
     logger.info("Starting backup...")
 
     try:
-        # 4. Fetch Config
-        device = CiscoDevice(SOURCE_CONFIG)
-        config_content = device.get_config()
+        # 4. Fetch Configs
+        if not os.path.exists(SOURCE_DIR):
+            logger.error(f"Source directory not found: {SOURCE_DIR}")
+            sys.exit(1)
 
-        # 5. Write to local storage
         backup_path = os.path.join(BACKUP_REPO_DIR, "backups")
         os.makedirs(backup_path, exist_ok=True)
-        target_file = os.path.join(backup_path, BACKUP_FILENAME)
         
-        with open(target_file, 'w') as f:
-            f.write(config_content)
+        backup_files = []
 
-        # 6. Sync to Git
-        git_manager = GitManager(BACKUP_REPO_DIR)
+        for filename in os.listdir(SOURCE_DIR):
+            source_file = os.path.join(SOURCE_DIR, filename)
+            
+            # Skip directories, only process files
+            if not os.path.isfile(source_file):
+                continue
+                
+            device = CiscoDevice(source_file)
+            config_content = device.get_config()
+
+            # 5. Write to local storage
+            target_file = os.path.join(backup_path, filename)
+            
+            with open(target_file, 'w') as f:
+                f.write(config_content)
+            
+            backup_files.append(os.path.relpath(target_file, BACKUP_REPO_DIR))
+
+        if not backup_files:
+            logger.warning("No configuration files found to backup.")
+            sys.exit(0)
+
+        # 6. Sync to Git (Manager already initialized)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        relative_path = os.path.relpath(target_file, BACKUP_REPO_DIR)
-        git_manager.commit_and_push(relative_path, f"Auto-backup: {timestamp}")
+        git_manager.commit_and_push(backup_files, f"Auto-backup: {timestamp}")
 
         logger.info("Backup completed successfully.")
 

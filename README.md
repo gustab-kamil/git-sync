@@ -4,9 +4,9 @@ A professional DevOps automation script written in Python to cyclically backup C
 
 ## Features
 
-- **Automated Backup**: Fetches running configuration from Cisco devices (simulated via source file for this demo).
+- **Automated Backup**: Fetches running configurations from all files in the source directory (`source_configs/`).
 - **Git Integration**: Automatically initializes a Git repository, tracks changes, and pushes updates.
-- **Flexible Authentication**: Supports both SSH (keys) and HTTPS (password) authentication.
+- **Auto-Detection**: Automatically detects if the repository was cloned via SSH or HTTPS and adjusts authentication accordingly.
 - **Change Detection**: Only commits when actual configuration changes are detected (Idempotency).
 - **Logging**: Comprehensive logging with rotation support.
 - **Resilience**: Robust error handling for file I/O and Git operations.
@@ -21,7 +21,7 @@ A professional DevOps automation script written in Python to cyclically backup C
 │   └── backup_script.py # Main application logic
 ├── backups/             # Destination for backed up configs (Auto-generated)
 ├── logs/                # Application logs (Auto-generated)
-├── cisco_running_config.cfg # Simulated device source
+├── source_configs/      # Source directory for device configurations
 ├── requirements.txt     # Python dependencies
 └── README.md            # Documentation
 ```
@@ -45,7 +45,7 @@ A professional DevOps automation script written in Python to cyclically backup C
 The script uses environment variables for configuration. You can create a `.env` file in the root directory:
 
 ```bash
-SOURCE_CONFIG_PATH=cisco_running_config.cfg
+SOURCE_CONFIG_DIR=source_configs
 BACKUP_REPO_PATH=.
 ```
 
@@ -58,6 +58,8 @@ To run the backup script manually:
 ```bash
 python3 src/backup_script.py
 ```
+
+The script automatically detects the authentication method based on the remote URL (SSH vs HTTPS).
 
 Check the `logs/` directory for execution details and `backups/` for the committed configuration.
 
